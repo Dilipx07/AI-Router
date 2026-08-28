@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-token_router.py v6
+token_router.py v1
 
 Multi-provider AI router.
 
@@ -1687,7 +1687,7 @@ def route(
     )
 
     print(
-        " AI ROUTER v6"
+        " AI ROUTER v1"
     )
 
     print(
@@ -2589,7 +2589,7 @@ def main():
     if args.interactive:
 
         print(
-            "=== Multi-Provider AI Router v6 ==="
+            "=== Multi-Provider AI Router v1 ==="
         )
 
         system_prompt = (

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-token_router.py v6
+token_router.py v1
 
 Multi-provider AI router.
 
@@ -1252,7 +1252,7 @@ def route(
     - tool results
     """
     print("\n==================================================")
-    print(" AI ROUTER v7")
+    print(" AI ROUTER v1")
     print("==================================================")
 
     if provider_override:
@@ -2117,7 +2117,7 @@ def main():
     if args.interactive:
 
         print(
-            "=== Multi-Provider AI Router v7 ==="
+            "=== Multi-Provider AI Router v1 ==="
         )
 
         system_prompt = (
