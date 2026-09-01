@@ -1,13 +1,32 @@
 """
 AI Router v1
 PHASE 13 — FULL PRODUCTION HARDENING REGRESSION
+
+Runs every v1 regression test from the repository root so that
+project-level imports such as `router`, `providers`, and
+`router_api` resolve correctly.
 """
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
+from pathlib import Path
 
+
+# ============================================================
+# PATHS
+# ============================================================
+
+TESTS_DIR = Path(__file__).resolve().parent
+
+PROJECT_ROOT = TESTS_DIR.parent.parent
+
+
+# ============================================================
+# TEST SUITE
+# ============================================================
 
 TESTS = [
     (
@@ -49,6 +68,10 @@ TESTS = [
 ]
 
 
+# ============================================================
+# TEST RUNNER
+# ============================================================
+
 def run_test(
     name: str,
     filename: str,
@@ -59,23 +82,81 @@ def run_test(
     print(name)
     print("=" * 70)
 
+    test_path = (
+        TESTS_DIR
+        / filename
+    )
+
+    if not test_path.exists():
+
+        print(
+            f"[FAIL] Test file not found: "
+            f"{test_path}"
+        )
+
+        return False
+
+    # --------------------------------------------------------
+    # Make project-root imports available to subprocesses.
+    # --------------------------------------------------------
+
+    environment = os.environ.copy()
+
+    current_pythonpath = (
+        environment.get(
+            "PYTHONPATH",
+            "",
+        )
+    )
+
+    project_root_string = str(
+        PROJECT_ROOT
+    )
+
+    pythonpath_entries = [
+        project_root_string
+    ]
+
+    if current_pythonpath:
+
+        pythonpath_entries.append(
+            current_pythonpath
+        )
+
+    environment["PYTHONPATH"] = (
+        os.pathsep.join(
+            pythonpath_entries
+        )
+    )
+
+    # --------------------------------------------------------
+    # Execute from repository root.
+    # --------------------------------------------------------
+
     result = subprocess.run(
         [
             sys.executable,
-            filename,
+            str(test_path),
         ],
+        cwd=PROJECT_ROOT,
+        env=environment,
         check=False,
     )
 
-    passed = result.returncode == 0
+    passed = (
+        result.returncode == 0
+    )
 
     print()
 
     if passed:
+
         print(
             f"[PASS] {name}"
         )
+
     else:
+
         print(
             f"[FAIL] {name}"
         )
@@ -83,11 +164,25 @@ def run_test(
     return passed
 
 
+# ============================================================
+# MAIN
+# ============================================================
+
 def main() -> int:
 
     print("=" * 70)
-    print("PHASE 13 — FULL PRODUCTION HARDENING REGRESSION")
+    print(
+        "PHASE 13 — FULL PRODUCTION HARDENING REGRESSION"
+    )
     print("=" * 70)
+
+    print(
+        f"project root: {PROJECT_ROOT}"
+    )
+
+    print(
+        f"test directory: {TESTS_DIR}"
+    )
 
     failures: list[str] = []
 
@@ -99,6 +194,7 @@ def main() -> int:
         )
 
         if not passed:
+
             failures.append(
                 f"{name} ({filename})"
             )
@@ -109,7 +205,11 @@ def main() -> int:
     print("=" * 70)
 
     total = len(TESTS)
-    passed_count = total - len(failures)
+
+    passed_count = (
+        total
+        - len(failures)
+    )
 
     print(
         f"passed: {passed_count}/{total}"
@@ -122,7 +222,9 @@ def main() -> int:
     if failures:
 
         print()
-        print("FAILED TESTS:")
+        print(
+            "FAILED TESTS:"
+        )
 
         for failure in failures:
 
@@ -151,6 +253,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+
     raise SystemExit(
         main()
     )
