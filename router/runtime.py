@@ -20,6 +20,7 @@ from .engine import RouterEngine
 from .executor import RouterExecutor
 from .health import HealthStore
 from .metrics import MetricsStore
+from .models import MODEL_REGISTRY
 from .persistence import RuntimePersistence
 from .policy import (
     RoutingPolicy,
@@ -55,6 +56,72 @@ class RouterRuntime:
     engine: RouterEngine
 
     executor: RouterExecutor
+
+    _started: bool = False
+
+    _shutdown: bool = False
+
+    # ========================================================
+    # STARTUP
+    # ========================================================
+
+    def startup(self) -> None:
+        """
+        Start the runtime.
+
+        Startup is idempotent.
+        """
+
+        if self._shutdown:
+
+            raise RuntimeError(
+                "RouterRuntime has already been shut down."
+            )
+
+        if self._started:
+
+            return
+
+        if self.persistence is not None:
+
+            self.persistence.startup()
+
+        self._started = True
+
+    # ========================================================
+    # SHUTDOWN
+    # ========================================================
+
+    def shutdown(self) -> None:
+        """
+        Shut down the runtime cleanly.
+
+        Shutdown is idempotent.
+        """
+
+        if self._shutdown:
+
+            return
+
+        if self.persistence is not None:
+
+            self.persistence.shutdown()
+
+        self._shutdown = True
+
+        self._started = False
+
+    # ========================================================
+    # STATE
+    # ========================================================
+
+    @property
+    def started(self) -> bool:
+        return self._started
+
+    @property
+    def shutdown_complete(self) -> bool:
+        return self._shutdown
 
 
 # ============================================================
@@ -105,6 +172,7 @@ def create_runtime() -> RouterRuntime:
     # --------------------------------------------------------
 
     engine = RouterEngine(
+        model_registry=MODEL_REGISTRY,
         health_store=health,
         quota_store=quota,
         metrics_store=metrics,
@@ -123,27 +191,20 @@ def create_runtime() -> RouterRuntime:
         router=engine,
     )
 
-    # --------------------------------------------------------
-    # Runtime
-    # --------------------------------------------------------
-
-    return RouterRuntime(
+    runtime = RouterRuntime(
         config=config,
-
         policy=policy,
-
         persistence=persistence,
-
         metrics=metrics,
-
         quota=quota,
-
         health=health,
-
         engine=engine,
-
         executor=executor,
     )
+
+    runtime.startup()
+
+    return runtime
 
 
 # ============================================================

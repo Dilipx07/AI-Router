@@ -69,16 +69,42 @@ class RouterExecutor:
         *,
         providers,
         health_store,
-        metrics_store,
-        quota_store,
+        metrics_store=None,
+        quota_store=None,
         router,
     ) -> None:
+        """
+        Create a router executor.
+
+        Production runtime passes the shared MetricsStore and
+        QuotaStore explicitly.
+
+        Older isolated tests may omit them; in that case, create
+        local stores so those tests remain independent and do not
+        fall back to mutable global state.
+        """
+
+        from .metrics import MetricsStore
+        from .quota import QuotaStore
 
         self.providers = providers
+
         self.health_store = health_store
-        self.metrics_store = metrics_store
-        self.quota_store = quota_store
+
+        self.metrics_store = (
+            metrics_store
+            if metrics_store is not None
+            else MetricsStore()
+        )
+
+        self.quota_store = (
+            quota_store
+            if quota_store is not None
+            else QuotaStore()
+        )
+
         self.router = router
+
 
     # ========================================================
     # PROVIDER RESOLUTION

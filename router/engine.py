@@ -95,22 +95,52 @@ class RouterEngine:
     def __init__(
         self,
         *,
-        model_registry,
-        health_store,
-        quota_store,
-        metrics_store,
-        policy,
+        model_registry=MODEL_REGISTRY,
+        health_store=None,
+        quota_store=None,
+        metrics_store=None,
+        policy=None,
     ) -> None:
+        """
+        Create a routing engine.
+
+        Production runtime passes all dependencies explicitly.
+
+        Defaults exist only for backwards compatibility with older
+        isolated tests and do not reference mutable global stores.
+        """
+
+        from .health import HealthStore
+        from .metrics import MetricsStore
+        from .quota import QuotaStore
+        from .policy import get_policy
 
         self.model_registry = model_registry
 
-        self.health_store = health_store
+        self.health_store = (
+            health_store
+            if health_store is not None
+            else HealthStore()
+        )
 
-        self.quota_store = quota_store
+        self.quota_store = (
+            quota_store
+            if quota_store is not None
+            else QuotaStore()
+        )
 
-        self.metrics_store = metrics_store
+        self.metrics_store = (
+            metrics_store
+            if metrics_store is not None
+            else MetricsStore()
+        )
 
-        self.policy = policy
+        self.policy = (
+            policy
+            if policy is not None
+            else get_policy("balanced")
+        )
+
 
     # ========================================================
     # CANDIDATE DISCOVERY
