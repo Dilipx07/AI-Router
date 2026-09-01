@@ -118,6 +118,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # ============================================================
 # EXECUTION COMPATIBILITY WRAPPER
 # ============================================================
@@ -846,6 +847,19 @@ def chat_completions(
 
     try:
 
+        print(
+            "REQUEST DEBUG:",
+            {
+                "messages": len(request.messages),
+                "tools": len(request.tools or []),
+                "tool_choice": request.tool_choice,
+                "estimated_chars": sum(
+                    len(str(message))
+                    for message in request.messages
+                ),
+            },
+            flush=True,
+        )
         result = execute_request(
             provider_request,
             required_capabilities=required_capabilities,

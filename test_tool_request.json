@@ -1,0 +1,31 @@
+﻿{
+  "model": "ai-router",
+  "provider": "cloudflare",
+  "messages": [
+    {
+      "role": "user",
+      "content": "What is 2 + 2?"
+    }
+  ],
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "calculator",
+        "description": "Calculate a number",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "expression": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "expression"
+          ]
+        }
+      }
+    }
+  ],
+  "tool_choice": "auto"
+}

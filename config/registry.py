@@ -357,82 +357,92 @@ PROVIDER_REGISTRY: dict[
             "client/v4/accounts"
         ),
 
-        models=[
+        models = [
             model(
                 "@cf/qwen/qwen3.8-27b",
                 10,
                 "chat",
                 "tools",
+                "vision",
+                "reasoning",
             ),
             model(
                 "@cf/zai-org/glm-5.2",
                 20,
                 "chat",
                 "tools",
+                "reasoning",
             ),
             model(
                 "@cf/moonshotai/kimi-k2.7-code",
                 30,
                 "chat",
                 "tools",
+                "vision",
+                "reasoning",
             ),
             model(
                 "@cf/deepseek-ai/deepseek-v4-flash-0731",
                 40,
                 "chat",
                 "tools",
+                "reasoning",
             ),
             model(
                 "@cf/deepseek-ai/deepseek-v4-pro-0813",
                 50,
                 "chat",
                 "tools",
+                "reasoning",
             ),
             model(
                 "@cf/openai/gpt-oss-120b",
                 60,
                 "chat",
                 "tools",
+                "reasoning",
             ),
             model(
                 "@cf/openai/gpt-oss-20b",
                 70,
                 "chat",
                 "tools",
+                "reasoning",
             ),
             model(
                 "@cf/qwen/qwen2.5-coder-32b-instruct",
                 80,
                 "chat",
-                "tools",
             ),
             model(
                 "@cf/qwen/qwen3-30b-a3b-fp8",
                 90,
                 "chat",
                 "tools",
+                "reasoning",
             ),
             model(
                 "@cf/zai-org/glm-4.7-flash",
                 100,
                 "chat",
                 "tools",
+                "reasoning",
             ),
             model(
                 "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
                 110,
                 "chat",
-                "tools",
+                metadata={
+                    "max_request_tokens": 22000,
+                    "max_context_tokens": 24000,
+                },
             ),
-
-            # This model was verified to reject tools and
-            # tool_choice, so it is explicitly chat-only.
             model(
                 "@cf/meta/llama-3.1-8b-instruct-fp8",
                 120,
                 "chat",
             ),
-        ],
+        ]
     ),
 
     # ========================================================

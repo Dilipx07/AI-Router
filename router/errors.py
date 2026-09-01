@@ -11,7 +11,9 @@ from __future__ import annotations
 
 from enum import Enum
 from typing import Any, Optional
+
 from providers.base import ProviderUsage
+
 
 # ============================================================
 # ERROR TYPES
@@ -67,37 +69,63 @@ class RouterError(Exception):
         model: Optional[str] = None,
         status_code: Optional[int] = None,
         retryable: bool = True,
-        metadata: Optional[dict[str, Any]] = None,
-        usage: Optional[ProviderUsage] = None,
+        metadata: Optional[
+            dict[str, Any]
+        ] = None,
+        usage: Optional[
+            ProviderUsage
+        ] = None,
     ) -> None:
 
-        super().__init__(message)
+        super().__init__(
+            message
+        )
 
         self.error_type = error_type
+
         self.message = message
+
         self.provider = provider
+
         self.model = model
+
         self.status_code = status_code
+
         self.retryable = retryable
+
         self.usage = (
             usage
             if usage is not None
             else ProviderUsage()
         )
-        self.metadata = metadata or {}
 
-    def __str__(self) -> str:
+        self.metadata = (
+            metadata
+            if metadata is not None
+            else {}
+        )
+
+    def __str__(
+        self,
+    ) -> str:
 
         location = ""
 
         if self.provider:
+
             location += self.provider
 
         if self.model:
-            location += f"/{self.model}"
+
+            location += (
+                f"/{self.model}"
+            )
 
         if location:
-            location = f" [{location}]"
+
+            location = (
+                f" [{location}]"
+            )
 
         return (
             f"{self.error_type.value}"
@@ -115,9 +143,6 @@ def _normalize_error_text(
 ) -> str:
     """
     Normalize provider error text for classification.
-
-    Classification is intentionally conservative and based on
-    recognizable provider terminology.
     """
 
     return " ".join(
@@ -153,12 +178,14 @@ def classify_http_error(
     ErrorType taxonomy.
 
     Status code is the primary signal. Error text is used to
-    distinguish provider-specific quota, billing, model, and
-    capability failures where the HTTP status alone is
-    insufficient.
+    distinguish provider-specific quota, billing, model,
+    context, and capability failures where the HTTP status
+    alone is insufficient.
     """
 
-    text = _normalize_error_text(message)
+    text = _normalize_error_text(
+        message
+    )
 
     # --------------------------------------------------------
     # AUTHENTICATION / AUTHORIZATION
@@ -169,6 +196,30 @@ def classify_http_error(
         return ErrorType.AUTH_FAILURE
 
     if status_code == 403:
+
+    # ----------------------------------------------------
+    # MODEL / PLAN AVAILABILITY
+    # ----------------------------------------------------
+
+        if _contains_any(
+            text,
+            (
+                "model is not available",
+                "model is unavailable",
+                "model not available",
+                "not available on the workers free plan",
+                "not available on the free plan",
+                "not available on free plan",
+                "upgrade to access this model",
+                "upgrade to continue using this model",
+                "model access",
+            ),
+        ):
+            return ErrorType.MODEL_UNAVAILABLE
+
+        # ----------------------------------------------------
+        # QUOTA
+        # ----------------------------------------------------
 
         if _contains_any(
             text,
@@ -185,6 +236,10 @@ def classify_http_error(
         ):
             return ErrorType.QUOTA_EXCEEDED
 
+        # ----------------------------------------------------
+        # PAYMENT / BILLING
+        # ----------------------------------------------------
+
         if _contains_any(
             text,
             (
@@ -196,6 +251,10 @@ def classify_http_error(
             ),
         ):
             return ErrorType.PAYMENT_REQUIRED
+
+        # ----------------------------------------------------
+        # AUTHENTICATION
+        # ----------------------------------------------------
 
         return ErrorType.AUTH_FAILURE
 
@@ -223,6 +282,7 @@ def classify_http_error(
                 "does not support",
             ),
         ):
+
             return ErrorType.TOOL_UNSUPPORTED
 
         if _contains_any(
@@ -234,8 +294,11 @@ def classify_http_error(
                 "maximum context",
                 "max context",
                 "token limit",
+                "request too large",
+                "request too long",
             ),
         ):
+
             return ErrorType.CONTEXT_TOO_LARGE
 
         if _contains_any(
@@ -248,6 +311,7 @@ def classify_http_error(
                 "blocked content",
             ),
         ):
+
             return ErrorType.CONTENT_FILTER
 
         return ErrorType.INVALID_REQUEST
@@ -272,6 +336,7 @@ def classify_http_error(
                 "model does not exist",
             ),
         ):
+
             return ErrorType.MODEL_NOT_FOUND
 
         return ErrorType.MODEL_NOT_FOUND
@@ -301,11 +366,40 @@ def classify_http_error(
         return ErrorType.CONTEXT_TOO_LARGE
 
     # --------------------------------------------------------
-    # RATE LIMIT / QUOTA
+    # RATE LIMIT / QUOTA / REQUEST SIZE
     # --------------------------------------------------------
 
     if status_code == 429:
 
+        # Groq-style request-size rejection:
+        #
+        # "tokens per minute (TPM)"
+        # "Limit 8000"
+        # "Requested 42598"
+        #
+        # This is a candidate-level request capacity problem.
+        if _contains_any(
+            text,
+            (
+                "tokens per minute",
+                "tpm",
+                "request too large",
+                "requested",
+            ),
+        ) and _contains_any(
+            text,
+            (
+                "limit",
+                "maximum",
+                "max",
+                "tokens per minute",
+                "tpm",
+            ),
+        ):
+
+            return ErrorType.CONTEXT_TOO_LARGE
+
+        # Provider/account quota exhaustion.
         if _contains_any(
             text,
             (
@@ -320,8 +414,15 @@ def classify_http_error(
                 "credits exceeded",
                 "insufficient credits",
                 "resource exhausted",
+                "daily free allocation",
+                "free allocation",
+                "allocation exhausted",
+                "neurons",
+                "daily allocation",
+                "monthly allocation",
             ),
         ):
+
             return ErrorType.QUOTA_EXCEEDED
 
         return ErrorType.RATE_LIMIT
@@ -358,7 +459,12 @@ def error_from_http_status(
     provider: Optional[str] = None,
     model: Optional[str] = None,
     message: str = "",
-    metadata: Optional[dict[str, Any]] = None,
+    metadata: Optional[
+        dict[str, Any]
+    ] = None,
+    usage: Optional[
+        ProviderUsage
+    ] = None,
 ) -> RouterError:
     """
     Convert an HTTP/API failure into a normalized RouterError.
@@ -382,7 +488,11 @@ def error_from_http_status(
         ErrorType.QUOTA_EXCEEDED,
     }
 
-    # Explicitly non-retryable failures.
+    # Explicitly non-retryable at the provider level.
+    #
+    # Automatic routing may still override candidate-specific
+    # failures such as context-too-large and tool-unsupported
+    # and continue to another model.
     if error_type in {
         ErrorType.AUTH_FAILURE,
         ErrorType.PAYMENT_REQUIRED,
@@ -391,6 +501,7 @@ def error_from_http_status(
         ErrorType.TOOL_UNSUPPORTED,
         ErrorType.CONTENT_FILTER,
     }:
+
         retryable = False
 
     default_messages = {
@@ -413,7 +524,7 @@ def error_from_http_status(
             "Model is unavailable.",
 
         ErrorType.CONTEXT_TOO_LARGE:
-            "Request exceeds the model context limit.",
+            "Request exceeds the model context or request-size limit.",
 
         ErrorType.INVALID_REQUEST:
             "Invalid request.",
@@ -444,11 +555,14 @@ def error_from_http_status(
         error_type=error_type,
         message=(
             message
-            or default_messages[error_type]
+            or default_messages[
+                error_type
+            ]
         ),
         provider=provider,
         model=model,
         status_code=status_code,
         retryable=retryable,
         metadata=metadata,
+        usage=usage,
     )

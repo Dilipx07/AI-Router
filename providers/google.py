@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import time
 from typing import Any
+
 import httpx
 
 from .base import (
@@ -26,11 +27,6 @@ from router.ids import create_tool_call_id
 class GoogleProvider(BaseProvider):
     """
     Google Gemini provider.
-
-    Configuration:
-        api_key: Google Gemini API key
-        base_url: Google Generative Language API base URL
-        timeout: Request timeout in seconds
     """
 
     name = "google"
@@ -53,18 +49,27 @@ class GoogleProvider(BaseProvider):
         super().__init__(config=config)
 
         self.api_key = str(
-            self.config.get("api_key", "")
+            self.config.get(
+                "api_key",
+                "",
+            )
         ).strip()
 
         self.base_url = str(
             self.config.get(
                 "base_url",
-                "https://generativelanguage.googleapis.com/v1beta/models",
+                (
+                    "https://generativelanguage.googleapis.com/"
+                    "v1beta/models"
+                ),
             )
         ).rstrip("/")
 
         self.timeout = float(
-            self.config.get("timeout", 60)
+            self.config.get(
+                "timeout",
+                60,
+            )
         )
 
     # ========================================================
@@ -72,11 +77,9 @@ class GoogleProvider(BaseProvider):
     # ========================================================
 
     def is_available(self) -> bool:
-        """
-        Return True when the Google API key is configured.
-        """
-
-        return bool(self.api_key)
+        return bool(
+            self.api_key
+        )
 
     # ========================================================
     # ENDPOINT
@@ -86,10 +89,6 @@ class GoogleProvider(BaseProvider):
         self,
         model: str,
     ) -> str:
-        """
-        Build the Gemini generateContent endpoint.
-        """
-
         return (
             f"{self.base_url}/"
             f"{model}:generateContent"
@@ -113,21 +112,24 @@ class GoogleProvider(BaseProvider):
     @staticmethod
     def _convert_messages(
         messages: list[dict[str, Any]],
-    ) -> tuple[list[dict[str, Any]], str | None]:
-        """
-        Convert OpenAI-style messages into Gemini contents.
+    ) -> tuple[
+        list[dict[str, Any]],
+        str | None,
+    ]:
 
-        Returns:
-            contents, system_instruction
-        """
+        contents: list[
+            dict[str, Any]
+        ] = []
 
-        contents: list[dict[str, Any]] = []
         system_instruction: str | None = None
 
         for message in messages:
 
             role = str(
-                message.get("role", "user")
+                message.get(
+                    "role",
+                    "user",
+                )
             ).lower()
 
             content = message.get(
@@ -141,57 +143,80 @@ class GoogleProvider(BaseProvider):
 
             if role == "system":
 
-                if isinstance(content, str):
+                if isinstance(
+                    content,
+                    str,
+                ):
 
                     if system_instruction:
+
                         system_instruction += (
                             "\n" + content
                         )
+
                     else:
+
                         system_instruction = content
 
-                elif isinstance(content, list):
+                elif isinstance(
+                    content,
+                    list,
+                ):
 
-                    parts = []
+                    parts: list[str] = []
 
                     for item in content:
 
-                        if not isinstance(item, dict):
+                        if not isinstance(
+                            item,
+                            dict,
+                        ):
                             continue
 
-                        text = item.get("text")
+                        text = item.get(
+                            "text"
+                        )
 
-                        if isinstance(text, str):
-                            parts.append(text)
+                        if isinstance(
+                            text,
+                            str,
+                        ):
+                            parts.append(
+                                text
+                            )
 
                     if parts:
 
-                        text = "\n".join(parts)
+                        text = "\n".join(
+                            parts
+                        )
 
                         if system_instruction:
+
                             system_instruction += (
                                 "\n" + text
                             )
+
                         else:
+
                             system_instruction = text
 
                 continue
 
-            # ------------------------------------------------
-            # ASSISTANT
-            # ------------------------------------------------
+            gemini_role = (
+                "model"
+                if role == "assistant"
+                else "user"
+            )
 
-            if role == "assistant":
-                gemini_role = "model"
-
-            else:
-                gemini_role = "user"
-
-            parts = GoogleProvider._content_to_parts(
-                content
+            parts = (
+                GoogleProvider._content_to_parts(
+                    content
+                )
             )
 
             if not parts:
+
                 parts = [
                     {
                         "text": "",
@@ -205,7 +230,10 @@ class GoogleProvider(BaseProvider):
                 }
             )
 
-        return contents, system_instruction
+        return (
+            contents,
+            system_instruction,
+        )
 
     # ========================================================
     # CONTENT CONVERSION
@@ -215,11 +243,11 @@ class GoogleProvider(BaseProvider):
     def _content_to_parts(
         content: Any,
     ) -> list[dict[str, Any]]:
-        """
-        Convert common message content formats to Gemini parts.
-        """
 
-        if isinstance(content, str):
+        if isinstance(
+            content,
+            str,
+        ):
 
             return [
                 {
@@ -227,14 +255,22 @@ class GoogleProvider(BaseProvider):
                 }
             ]
 
-        if not isinstance(content, list):
+        if not isinstance(
+            content,
+            list,
+        ):
             return []
 
-        parts: list[dict[str, Any]] = []
+        parts: list[
+            dict[str, Any]
+        ] = []
 
         for item in content:
 
-            if isinstance(item, str):
+            if isinstance(
+                item,
+                str,
+            ):
 
                 parts.append(
                     {
@@ -244,20 +280,30 @@ class GoogleProvider(BaseProvider):
 
                 continue
 
-            if not isinstance(item, dict):
+            if not isinstance(
+                item,
+                dict,
+            ):
                 continue
 
-            item_type = item.get("type")
+            item_type = item.get(
+                "type"
+            )
 
-            # ----------------------------------------------
+            # ------------------------------------------------
             # TEXT
-            # ----------------------------------------------
+            # ------------------------------------------------
 
             if item_type == "text":
 
-                text = item.get("text")
+                text = item.get(
+                    "text"
+                )
 
-                if isinstance(text, str):
+                if isinstance(
+                    text,
+                    str,
+                ):
 
                     parts.append(
                         {
@@ -267,9 +313,9 @@ class GoogleProvider(BaseProvider):
 
                 continue
 
-            # ----------------------------------------------
+            # ------------------------------------------------
             # IMAGE URL
-            # ----------------------------------------------
+            # ------------------------------------------------
 
             if item_type == "image_url":
 
@@ -281,102 +327,392 @@ class GoogleProvider(BaseProvider):
                     image_url,
                     dict,
                 ):
-                    url = image_url.get("url")
+
+                    url = image_url.get(
+                        "url"
+                    )
+
                 else:
+
                     url = image_url
 
-                if isinstance(url, str):
+                if isinstance(
+                    url,
+                    str,
+                ) and url.startswith(
+                    "data:"
+                ):
 
-                    # Gemini accepts inline image data.
-                    # Remote URLs cannot be passed directly
-                    # through generateContent.
-                    if url.startswith(
-                        "data:"
-                    ):
+                    try:
 
-                        try:
-
-                            header, data = url.split(
+                        header, data = (
+                            url.split(
                                 ",",
                                 1,
                             )
+                        )
 
-                            mime_type = (
-                                header.split(
-                                    ";",
-                                    1,
-                                )[0]
-                                .replace(
-                                    "data:",
-                                    "",
-                                )
+                        mime_type = (
+                            header.split(
+                                ";",
+                                1,
+                            )[0]
+                            .replace(
+                                "data:",
+                                "",
                             )
+                        )
 
-                            parts.append(
-                                {
-                                    "inline_data": {
-                                        "mime_type": mime_type,
-                                        "data": data,
-                                    }
+                        parts.append(
+                            {
+                                "inline_data": {
+                                    "mime_type":
+                                        mime_type,
+                                    "data":
+                                        data,
                                 }
-                            )
+                            }
+                        )
 
-                        except ValueError:
-                            pass
+                    except ValueError:
+                        pass
 
                 continue
 
         return parts
 
     # ========================================================
+    # GEMINI SCHEMA NORMALIZATION
+    # ========================================================
+
+    @classmethod
+    def _sanitize_schema(
+        cls,
+        schema: Any,
+    ) -> Any:
+        """
+        Convert OpenAI/Cline JSON Schema into the subset
+        accepted by Gemini FunctionDeclaration Schema.
+
+        Gemini does not accept arbitrary JSON Schema keywords.
+        Required fields must also exist in the corresponding
+        properties object.
+        """
+
+        if isinstance(schema, list):
+
+            return [
+                cls._sanitize_schema(item)
+                for item in schema
+            ]
+
+        if not isinstance(
+            schema,
+            dict,
+        ):
+            return schema
+
+        # Gemini-compatible schema fields.
+        allowed_keys = {
+            "type",
+            "description",
+            "properties",
+            "required",
+            "items",
+            "enum",
+            "format",
+            "minimum",
+            "maximum",
+            "minLength",
+            "maxLength",
+            "minItems",
+            "maxItems",
+            "pattern",
+            "propertyOrdering",
+        }
+
+        result: dict[str, Any] = {}
+
+        # ----------------------------------------------------
+        # NORMAL FIELDS
+        # ----------------------------------------------------
+
+        for key, value in schema.items():
+
+            if key not in allowed_keys:
+                continue
+
+            result[key] = cls._sanitize_schema(
+                value
+            )
+
+        # ----------------------------------------------------
+        # anyOf / oneOf
+        # ----------------------------------------------------
+
+        for union_name in (
+            "anyOf",
+            "oneOf",
+        ):
+
+            union = schema.get(
+                union_name
+            )
+
+            if not isinstance(
+                union,
+                list,
+            ):
+                continue
+
+            usable = []
+
+            for item in union:
+
+                if not isinstance(
+                    item,
+                    dict,
+                ):
+                    continue
+
+                if item.get("type") == "null":
+                    continue
+
+                usable.append(item)
+
+            if len(usable) == 1:
+
+                normalized = cls._sanitize_schema(
+                    usable[0]
+                )
+
+                if isinstance(
+                    normalized,
+                    dict,
+                ):
+                    result.update(
+                        normalized
+                    )
+
+            break
+
+        # ----------------------------------------------------
+        # const -> enum
+        # ----------------------------------------------------
+
+        if "const" in schema:
+
+            value = schema.get(
+                "const"
+            )
+
+            if "enum" not in result:
+
+                result["enum"] = [
+                    value
+                ]
+
+        # ----------------------------------------------------
+        # PROPERTIES
+        # ----------------------------------------------------
+
+        original_properties = schema.get(
+            "properties"
+        )
+
+        if isinstance(
+            original_properties,
+            dict,
+        ):
+
+            cleaned_properties: dict[
+                str,
+                Any,
+            ] = {}
+
+            for name, value in original_properties.items():
+
+                if not isinstance(
+                    name,
+                    str,
+                ):
+                    continue
+
+                cleaned = cls._sanitize_schema(
+                    value
+                )
+
+                if isinstance(
+                    cleaned,
+                    dict,
+                ):
+                    cleaned_properties[name] = (
+                        cleaned
+                    )
+
+            result["properties"] = (
+                cleaned_properties
+            )
+
+        # ----------------------------------------------------
+        # REQUIRED
+        # ----------------------------------------------------
+        #
+        # Gemini requires every required field to exist in
+        # properties.
+        # ----------------------------------------------------
+
+        original_required = schema.get(
+            "required"
+        )
+
+        final_properties = result.get(
+            "properties"
+        )
+
+        if isinstance(
+            original_required,
+            list,
+        ) and isinstance(
+            final_properties,
+            dict,
+        ):
+
+            result["required"] = [
+                name
+                for name in original_required
+                if (
+                    isinstance(
+                        name,
+                        str,
+                    )
+                    and name in final_properties
+                )
+            ]
+
+            # Do not send an empty required list.
+            if not result["required"]:
+
+                result.pop(
+                    "required",
+                    None,
+                )
+
+        else:
+
+            result.pop(
+                "required",
+                None,
+            )
+
+        # ----------------------------------------------------
+        # ITEMS
+        # ----------------------------------------------------
+
+        if "items" in result:
+
+            items = result.get(
+                "items"
+            )
+
+            if isinstance(
+                items,
+                dict,
+            ):
+
+                result["items"] = (
+                    cls._sanitize_schema(
+                        items
+                    )
+                )
+
+        return result
+
+    # ========================================================
     # TOOL CONVERSION
     # ========================================================
 
-    @staticmethod
+    @classmethod
     def _convert_tools(
-        tools: list[dict[str, Any]] | None,
-    ) -> list[dict[str, Any]]:
+        cls,
+        tools: list[
+            dict[str, Any]
+        ] | None,
+    ) -> list[
+        dict[str, Any]
+    ]:
         """
-        Convert OpenAI-style function tools to Gemini tools.
+        Convert OpenAI function tools into Gemini
+        function declarations.
         """
 
         if not tools:
             return []
 
-        declarations: list[dict[str, Any]] = []
+        declarations: list[
+            dict[str, Any]
+        ] = []
 
         for tool in tools:
 
-            if not isinstance(tool, dict):
+            if not isinstance(
+                tool,
+                dict,
+            ):
                 continue
 
-            function = tool.get("function")
+            function = tool.get(
+                "function"
+            )
 
-            if not isinstance(function, dict):
+            if not isinstance(
+                function,
+                dict,
+            ):
                 continue
 
-            declaration: dict[str, Any] = {
-                "name": function.get(
-                    "name",
-                    "",
-                ),
+            name = function.get(
+                "name",
+                "",
+            )
+
+            if not isinstance(
+                name,
+                str,
+            ) or not name:
+                continue
+
+            declaration: dict[
+                str,
+                Any,
+            ] = {
+                "name": name,
             }
 
             description = function.get(
                 "description"
             )
 
-            if description:
-                declaration["description"] = (
-                    description
-                )
+            if isinstance(
+                description,
+                str,
+            ):
+                declaration[
+                    "description"
+                ] = description
 
             parameters = function.get(
                 "parameters"
             )
 
-            if isinstance(parameters, dict):
-                declaration["parameters"] = (
+            if isinstance(
+                parameters,
+                dict,
+            ):
+
+                declaration[
+                    "parameters"
+                ] = cls._sanitize_schema(
                     parameters
                 )
 
@@ -402,24 +738,29 @@ class GoogleProvider(BaseProvider):
     def _generation_config(
         request: ProviderRequest,
     ) -> dict[str, Any]:
-        """
-        Build Gemini generation configuration.
-        """
 
-        config: dict[str, Any] = {}
+        config: dict[
+            str,
+            Any,
+        ] = {}
 
         if request.temperature is not None:
-            config["temperature"] = (
-                request.temperature
-            )
+
+            config[
+                "temperature"
+            ] = request.temperature
 
         if request.top_p is not None:
-            config["topP"] = request.top_p
-            
+
+            config[
+                "topP"
+            ] = request.top_p
+
         if request.max_tokens is not None:
-            config["maxOutputTokens"] = (
-                request.max_tokens
-            )
+
+            config[
+                "maxOutputTokens"
+            ] = request.max_tokens
 
         return config
 
@@ -427,62 +768,65 @@ class GoogleProvider(BaseProvider):
     # REQUEST PAYLOAD
     # ========================================================
 
-    @staticmethod
+    @classmethod
     def _build_payload(
+        cls,
         request: ProviderRequest,
     ) -> dict[str, Any]:
-        """
-        Convert ProviderRequest into Gemini format.
-        """
 
-        contents, system_instruction = (
-            GoogleProvider._convert_messages(
-                request.messages
-            )
+        (
+            contents,
+            system_instruction,
+        ) = cls._convert_messages(
+            request.messages
         )
 
-        payload: dict[str, Any] = {
+        payload: dict[
+            str,
+            Any,
+        ] = {
             "contents": contents,
         }
 
         if system_instruction:
 
-            payload["systemInstruction"] = {
+            payload[
+                "systemInstruction"
+            ] = {
                 "parts": [
                     {
-                        "text": system_instruction,
+                        "text":
+                            system_instruction,
                     }
                 ]
             }
 
-        tools = GoogleProvider._convert_tools(
+        tools = cls._convert_tools(
             request.tools
         )
 
         if tools:
-            payload["tools"] = tools
 
-        generation_config = (
-            GoogleProvider._generation_config(
-                request
-            )
-        )
-
-        if generation_config:
-            payload["generationConfig"] = (
-                generation_config
-            )
+            payload[
+                "tools"
+            ] = tools
 
         if request.tool_choice is not None:
 
-            tool_config: dict[str, Any] = {}
+            tool_config: dict[
+                str,
+                Any,
+            ] = {}
 
             if isinstance(
                 request.tool_choice,
                 str,
             ):
 
-                if request.tool_choice == "none":
+                if (
+                    request.tool_choice
+                    == "none"
+                ):
 
                     tool_config[
                         "function_calling_config"
@@ -490,7 +834,10 @@ class GoogleProvider(BaseProvider):
                         "mode": "NONE",
                     }
 
-                elif request.tool_choice == "required":
+                elif (
+                    request.tool_choice
+                    == "required"
+                ):
 
                     tool_config[
                         "function_calling_config"
@@ -498,7 +845,10 @@ class GoogleProvider(BaseProvider):
                         "mode": "ANY",
                     }
 
-                elif request.tool_choice == "auto":
+                elif (
+                    request.tool_choice
+                    == "auto"
+                ):
 
                     tool_config[
                         "function_calling_config"
@@ -507,7 +857,22 @@ class GoogleProvider(BaseProvider):
                     }
 
             if tool_config:
-                payload["toolConfig"] = tool_config
+
+                payload[
+                    "toolConfig"
+                ] = tool_config
+
+        generation_config = (
+            cls._generation_config(
+                request
+            )
+        )
+
+        if generation_config:
+
+            payload[
+                "generationConfig"
+            ] = generation_config
 
         return payload
 
@@ -519,13 +884,10 @@ class GoogleProvider(BaseProvider):
     def _extract_content(
         data: dict[str, Any],
     ) -> str:
-        """
-        Extract textual content from Gemini response.
-        """
 
         candidates = data.get(
             "candidates",
-            []
+            [],
         )
 
         if not isinstance(
@@ -556,7 +918,7 @@ class GoogleProvider(BaseProvider):
 
             parts = content.get(
                 "parts",
-                []
+                [],
             )
 
             if not isinstance(
@@ -581,9 +943,13 @@ class GoogleProvider(BaseProvider):
                     text,
                     str,
                 ):
-                    texts.append(text)
+                    texts.append(
+                        text
+                    )
 
-        return "".join(texts)
+        return "".join(
+            texts
+        )
 
     # ========================================================
     # TOOL CALL EXTRACTION
@@ -592,15 +958,12 @@ class GoogleProvider(BaseProvider):
     @staticmethod
     def _extract_tool_calls(
         data: dict[str, Any],
-        request_id : str,   
+        request_id: str,
     ) -> list[dict[str, Any]]:
-        """
-        Extract Gemini function calls and normalize them.
-        """
 
         candidates = data.get(
             "candidates",
-            []
+            [],
         )
 
         if not isinstance(
@@ -609,7 +972,9 @@ class GoogleProvider(BaseProvider):
         ):
             return []
 
-        tool_calls: list[dict[str, Any]] = []
+        tool_calls: list[
+            dict[str, Any]
+        ] = []
 
         for candidate in candidates:
 
@@ -631,7 +996,7 @@ class GoogleProvider(BaseProvider):
 
             parts = content.get(
                 "parts",
-                []
+                [],
             )
 
             if not isinstance(
@@ -640,7 +1005,9 @@ class GoogleProvider(BaseProvider):
             ):
                 continue
 
-            for index, part in enumerate(parts):
+            for index, part in enumerate(
+                parts
+            ):
 
                 if not isinstance(
                     part,
@@ -670,19 +1037,31 @@ class GoogleProvider(BaseProvider):
 
                 tool_calls.append(
                     {
-                        "id": create_tool_call_id(
-                            request_id,
-                            index,
-                        ),
-                        "type": "function",
-                        "function": {
-                            "name": name,
-                            "arguments": json.dumps(
-                                args
-                                if isinstance(args, dict)
-                                else {},
-                                separators=(",", ":"),
+                        "id":
+                            create_tool_call_id(
+                                request_id,
+                                index,
                             ),
+                        "type":
+                            "function",
+                        "function": {
+                            "name":
+                                name,
+                            "arguments":
+                                json.dumps(
+                                    (
+                                        args
+                                        if isinstance(
+                                            args,
+                                            dict,
+                                        )
+                                        else {}
+                                    ),
+                                    separators=(
+                                        ",",
+                                        ":",
+                                    ),
+                                ),
                         },
                     }
                 )
@@ -697,13 +1076,10 @@ class GoogleProvider(BaseProvider):
     def _extract_finish_reason(
         data: dict[str, Any],
     ) -> str | None:
-        """
-        Extract Gemini finish reason.
-        """
 
         candidates = data.get(
             "candidates",
-            []
+            [],
         )
 
         if not isinstance(
@@ -733,16 +1109,13 @@ class GoogleProvider(BaseProvider):
         return None
 
     # ========================================================
-    # USAGE EXTRACTION
+    # USAGE
     # ========================================================
 
     @staticmethod
     def _extract_usage(
         data: dict[str, Any],
     ) -> ProviderUsage:
-        """
-        Extract and normalize Gemini usage metadata.
-        """
 
         usage = data.get(
             "usageMetadata",
@@ -756,21 +1129,29 @@ class GoogleProvider(BaseProvider):
             return ProviderUsage()
 
         return ProviderUsage(
-            prompt_tokens=usage.get(
-                "promptTokenCount",
-                0,
-            ) or 0,
-
-            completion_tokens=usage.get(
-                "candidatesTokenCount",
-                0,
-            ) or 0,
-
-            total_tokens=usage.get(
-                "totalTokenCount",
-                0,
-            ) or 0,
+            prompt_tokens=(
+                usage.get(
+                    "promptTokenCount",
+                    0,
+                )
+                or 0
+            ),
+            completion_tokens=(
+                usage.get(
+                    "candidatesTokenCount",
+                    0,
+                )
+                or 0
+            ),
+            total_tokens=(
+                usage.get(
+                    "totalTokenCount",
+                    0,
+                )
+                or 0
+            ),
         ).normalized()
+
     # ========================================================
     # ERROR EXTRACTION
     # ========================================================
@@ -779,9 +1160,6 @@ class GoogleProvider(BaseProvider):
     def _extract_error(
         data: dict[str, Any],
     ) -> str | None:
-        """
-        Extract Google's API error message.
-        """
 
         error = data.get(
             "error"
@@ -814,9 +1192,6 @@ class GoogleProvider(BaseProvider):
         model: str,
         request: ProviderRequest,
     ) -> ProviderResult:
-        """
-        Execute a Gemini generateContent request.
-        """
 
         if not self.is_available():
 
@@ -832,7 +1207,9 @@ class GoogleProvider(BaseProvider):
 
         started = time.perf_counter()
 
-        url = self._endpoint(model)
+        url = self._endpoint(
+            model
+        )
 
         params = {
             "key": self.api_key,
@@ -840,6 +1217,45 @@ class GoogleProvider(BaseProvider):
 
         payload = self._build_payload(
             request
+        )
+
+        print(
+            "GOOGLE PAYLOAD DEBUG:",
+            {
+                "request_id":
+                    request.metadata.get(
+                        "request_id"
+                    ),
+                "model":
+                    model,
+                "messages":
+                    len(
+                        payload.get(
+                            "contents",
+                            [],
+                        )
+                    ),
+                "tools":
+                    sum(
+                        len(
+                            tool.get(
+                                "function_declarations",
+                                [],
+                            )
+                        )
+                        for tool in payload.get(
+                            "tools",
+                            [],
+                        )
+                        if isinstance(
+                            tool,
+                            dict,
+                        )
+                    ),
+                "tool_choice":
+                    request.tool_choice,
+            },
+            flush=True,
         )
 
         try:
@@ -858,35 +1274,59 @@ class GoogleProvider(BaseProvider):
             )
 
             try:
+
                 data = response.json()
-                usage = self._extract_usage(
-                    data
+
+                usage = (
+                    self._extract_usage(
+                        data
+                    )
                 )
+
             except ValueError:
+
                 data = {}
+
+                usage = ProviderUsage()
+
+            # ------------------------------------------------
+            # HTTP ERROR
+            # ------------------------------------------------
 
             if response.status_code >= 400:
 
                 error_message = (
-                    self._extract_error(data)
+                    self._extract_error(
+                        data
+                    )
                     or response.text
-                    or f"HTTP {response.status_code}"
+                    or (
+                        f"HTTP "
+                        f"{response.status_code}"
+                    )
                 )
 
-                return ProviderResult.success_result(
+                return ProviderResult.failure_result(
                     provider=self.provider_name,
                     model=model,
-                    content=content,
-                    tool_calls=tool_calls,
-                    finish_reason=finish_reason,
+                    status="provider_failure",
+                    error=error_message,
                     elapsed=elapsed,
-                    http_status=response.status_code,
+                    http_status=(
+                        response.status_code
+                    ),
                     raw_response=data,
                     usage=usage,
                 )
 
-            content = self._extract_content(
-                data
+            # ------------------------------------------------
+            # SUCCESS
+            # ------------------------------------------------
+
+            content = (
+                self._extract_content(
+                    data
+                )
             )
 
             request_id = str(
@@ -897,6 +1337,7 @@ class GoogleProvider(BaseProvider):
             ).strip()
 
             if not request_id:
+
                 raise ValueError(
                     "ProviderRequest is missing request_id."
                 )
@@ -921,11 +1362,15 @@ class GoogleProvider(BaseProvider):
                     model=model,
                     status="empty_response",
                     error=(
-                        "Google returned an empty response."
+                        "Google returned "
+                        "an empty response."
                     ),
                     elapsed=elapsed,
-                    http_status=response.status_code,
+                    http_status=(
+                        response.status_code
+                    ),
                     raw_response=data,
+                    usage=usage,
                 )
 
             return ProviderResult.success_result(
@@ -935,8 +1380,11 @@ class GoogleProvider(BaseProvider):
                 tool_calls=tool_calls,
                 finish_reason=finish_reason,
                 elapsed=elapsed,
-                http_status=response.status_code,
+                http_status=(
+                    response.status_code
+                ),
                 raw_response=data,
+                usage=usage,
             )
 
         except httpx.TimeoutException as exc:
@@ -983,6 +1431,9 @@ class GoogleProvider(BaseProvider):
                 provider=self.provider_name,
                 model=model,
                 status="provider_failure",
-                error=str(exc),
+                error=(
+                    str(exc)
+                    or "Unexpected Google provider failure."
+                ),
                 elapsed=elapsed,
             )
