@@ -509,17 +509,22 @@ class RouterExecutor:
 
                 retryable = error.retryable
 
-                # MODEL_NOT_FOUND is normally non-retryable because an
-                # explicitly requested model should fail immediately.
+                # During automatic routing, failures that make a specific
+                # candidate unusable should allow the router to continue to
+                # the next ranked candidate.
                 #
-                # During automatic routing, however, a configured model
-                # that disappeared should be skipped in favor of the next
-                # ranked candidate.
-                if (
-                    error.error_type == ErrorType.MODEL_NOT_FOUND
-                    and not explicit_model
-                ):
-                    retryable = True
+                # Explicit model requests remain terminal.
+
+                if not explicit_model:
+
+                    if error.error_type in {
+                        ErrorType.MODEL_NOT_FOUND,
+                        ErrorType.MODEL_UNAVAILABLE,
+                        ErrorType.PAYMENT_REQUIRED,
+                        ErrorType.QUOTA_EXCEEDED,
+                        ErrorType.TOOL_UNSUPPORTED,
+                    }:
+                        retryable = True
 
                 if not retryable:
 
@@ -530,18 +535,23 @@ class RouterExecutor:
                         model=error.model,
                         status_code=error.status_code,
                         retryable=False,
+                        usage=error.usage,
                         metadata={
-                            "request_id": request.metadata.get(
-                                "request_id"
-                            ),
-                            "attempts": attempts,
+                            "request_id":
+                                request.metadata.get(
+                                    "request_id"
+                                ),
+
+                            "attempts":
+                                attempts,
+
                             "routing_rejected":
                                 list(decision.rejected),
                         },
-
                     ) from error
 
                 continue
+
 
         # ----------------------------------------------------
         # ALL CANDIDATES FAILED
@@ -609,17 +619,46 @@ class RouterExecutor:
         ] = None,
         provider: Optional[str] = None,
         model: Optional[str] = None,
-        metadata: Optional[dict[str, Any]] = None,
+        metadata: Optional[
+            dict[str, Any]
+        ] = None,
     ) -> ProviderResult:
         """
         Convenience method that performs routing and execution
         in one operation.
+
+        The routing request receives the complete incoming request
+        payload so the engine can perform request-size filtering,
+        capability filtering, quota filtering, and scoring before
+        any provider is executed.
         """
+
+        # --------------------------------------------------------
+        # REQUEST ID
+        # --------------------------------------------------------
+
         request.metadata.setdefault(
             "request_id",
             create_request_id(),
         )
-        
+
+        # --------------------------------------------------------
+        # MERGE ROUTING METADATA
+        # --------------------------------------------------------
+
+        routing_metadata = dict(
+            request.metadata
+        )
+
+        if metadata:
+            routing_metadata.update(
+                metadata
+            )
+
+        # --------------------------------------------------------
+        # ROUTING REQUEST
+        # --------------------------------------------------------
+
         decision = self.router.route(
             RoutingRequest(
                 required_capabilities=frozenset(
@@ -627,9 +666,21 @@ class RouterExecutor:
                 ),
                 provider=provider,
                 model=model,
-                metadata=metadata or {},
+                metadata=routing_metadata,
+
+                # Pass the actual request payload into the routing
+                # engine so request-size estimation can be performed.
+                messages=tuple(
+                    request.messages
+                ),
+                tools=request.tools,
+                tool_choice=request.tool_choice,
             )
         )
+
+        # --------------------------------------------------------
+        # EXECUTION
+        # --------------------------------------------------------
 
         return self.execute(
             request,

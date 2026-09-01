@@ -3,13 +3,15 @@ AI Router v1
 Core routing engine.
 
 The engine is responsible for:
+
 - discovering model candidates
 - filtering unavailable candidates
+- filtering request-size-incompatible candidates
 - filtering incompatible capabilities
 - ranking candidates
 - producing a routing decision
 
-The engine does NOT execute provider API calls yet.
+The engine does NOT execute provider API calls.
 """
 
 from __future__ import annotations
@@ -18,8 +20,109 @@ from dataclasses import dataclass
 from typing import Any, Iterable, Optional
 
 from config.registry import PROVIDER_REGISTRY
-from .models import MODEL_REGISTRY, ModelCandidate
-from .scorer import ScoredCandidate, rank_candidates
+
+from .models import (
+    MODEL_REGISTRY,
+    ModelCandidate,
+)
+from .scorer import (
+    ScoredCandidate,
+    rank_candidates,
+)
+
+
+# ============================================================
+# REQUEST TOKEN ESTIMATION
+# ============================================================
+
+# Conservative character/token ratio.
+
+# This is deliberately conservative because underestimating
+# a request can result in sending an oversized request to a
+# constrained provider.
+TOKEN_ESTIMATION_CHARS = 3.5
+
+
+def estimate_text_tokens(
+    value: Any,
+) -> int:
+    """
+    Estimate the number of tokens represented by arbitrary text.
+
+    This is a routing preflight estimate, not billing-grade
+    tokenization.
+
+    The conservative 3.5 chars/token ratio is intentionally used
+    so request-size filtering prefers skipping a constrained model
+    rather than accidentally sending an oversized request.
+    """
+
+    if value is None:
+        return 0
+
+    if isinstance(
+        value,
+        str,
+    ):
+
+        text = value
+
+    else:
+
+        text = str(value)
+
+    if not text:
+
+        return 0
+
+    return max(
+        1,
+        int(
+            len(text)
+            / TOKEN_ESTIMATION_CHARS
+        ),
+    )
+
+
+def estimate_request_tokens(
+    request: RoutingRequest,
+) -> int:
+    """
+    Estimate total request tokens.
+
+    The estimate includes:
+
+    - message content
+    - message role
+    - tool definitions
+    - tool choice
+
+    Request parameters such as max_tokens are intentionally not
+    counted as input tokens.
+    """
+
+    total = 0
+
+    for message in request.messages:
+
+        total += estimate_text_tokens(
+            message
+        )
+
+    if request.tools is not None:
+
+        total += estimate_text_tokens(
+            request.tools
+        )
+
+    if request.tool_choice is not None:
+
+        total += estimate_text_tokens(
+            request.tool_choice
+        )
+
+    return total
+
 
 # ============================================================
 # ROUTING REQUEST
@@ -29,21 +132,61 @@ from .scorer import ScoredCandidate, rank_candidates
 class RoutingRequest:
     """
     Normalized requirements for one routing operation.
+
+    `messages`, `tools`, and `tool_choice` are optional because
+    older routing tests may construct RoutingRequest objects that
+    only describe candidate-selection requirements.
+
+    Production callers should populate them when available.
     """
 
-    required_capabilities: frozenset[str] = frozenset()
+    required_capabilities: frozenset[str] = (
+        frozenset()
+    )
 
     provider: Optional[str] = None
+
     model: Optional[str] = None
 
-    metadata: Optional[dict[str, Any]] = None
+    metadata: Optional[
+        dict[str, Any]
+    ] = None
 
-    def __post_init__(self) -> None:
+    # Optional request payload information used by request-size
+    # preflight filtering.
+
+    messages: tuple[
+        dict[str, Any],
+        ...
+    ] = ()
+
+    tools: Optional[Any] = None
+
+    tool_choice: Optional[Any] = None
+
+    def __post_init__(
+        self,
+    ) -> None:
+
         if self.metadata is None:
+
             object.__setattr__(
                 self,
                 "metadata",
                 {},
+            )
+
+        if not isinstance(
+            self.messages,
+            tuple,
+        ):
+
+            object.__setattr__(
+                self,
+                "messages",
+                tuple(
+                    self.messages
+                ),
             )
 
 
@@ -57,7 +200,9 @@ class RoutingDecision:
     Result of the routing engine's selection phase.
     """
 
-    selected: Optional[ScoredCandidate]
+    selected: Optional[
+        ScoredCandidate
+    ]
 
     candidates_considered: int
 
@@ -65,20 +210,40 @@ class RoutingDecision:
 
     candidates_compatible: int
 
-    rejected: tuple[dict[str, Any], ...] = ()
-    
-    ranked: tuple[ScoredCandidate, ...] = ()
+    rejected: tuple[
+        dict[str, Any],
+        ...
+    ] = ()
+
+    ranked: tuple[
+        ScoredCandidate,
+        ...
+    ] = ()
 
     @property
-    def success(self) -> bool:
-        return self.selected is not None
+    def success(
+        self,
+    ) -> bool:
+
+        return (
+            self.selected
+            is not None
+        )
 
     @property
-    def candidate(self) -> Optional[ModelCandidate]:
+    def candidate(
+        self,
+    ) -> Optional[
+        ModelCandidate
+    ]:
+
         if not self.selected:
+
             return None
 
-        return self.selected.candidate
+        return (
+            self.selected.candidate
+        )
 
 
 # ============================================================
@@ -115,7 +280,9 @@ class RouterEngine:
         from .quota import QuotaStore
         from .policy import get_policy
 
-        self.model_registry = model_registry
+        self.model_registry = (
+            model_registry
+        )
 
         self.health_store = (
             health_store
@@ -138,9 +305,10 @@ class RouterEngine:
         self.policy = (
             policy
             if policy is not None
-            else get_policy("balanced")
+            else get_policy(
+                "balanced"
+            )
         )
-
 
     # ========================================================
     # CANDIDATE DISCOVERY
@@ -164,7 +332,8 @@ class RouterEngine:
             candidates = [
                 candidate
                 for candidate in candidates
-                if candidate.provider == request.provider
+                if candidate.provider
+                == request.provider
             ]
 
         if request.model:
@@ -172,7 +341,8 @@ class RouterEngine:
             candidates = [
                 candidate
                 for candidate in candidates
-                if candidate.model == request.model
+                if candidate.model
+                == request.model
             ]
 
         return candidates
@@ -189,9 +359,14 @@ class RouterEngine:
         Check whether provider configuration is usable.
         """
 
-        config = PROVIDER_REGISTRY.get(provider)
+        config = (
+            PROVIDER_REGISTRY.get(
+                provider
+            )
+        )
 
         if config is None:
+
             return False
 
         return bool(
@@ -204,11 +379,21 @@ class RouterEngine:
 
     def filter_health(
         self,
-        candidates: Iterable[ModelCandidate],
-    ) -> tuple[list[ModelCandidate], list[dict[str, Any]]]:
+        candidates: Iterable[
+            ModelCandidate
+        ],
+    ) -> tuple[
+        list[ModelCandidate],
+        list[dict[str, Any]],
+    ]:
 
-        available = []
-        rejected = []
+        available: list[
+            ModelCandidate
+        ] = []
+
+        rejected: list[
+            dict[str, Any]
+        ] = []
 
         for candidate in candidates:
 
@@ -218,8 +403,10 @@ class RouterEngine:
 
                 rejected.append(
                     {
-                        "candidate": candidate.identifier,
-                        "reason": "provider_unavailable",
+                        "candidate":
+                            candidate.identifier,
+                        "reason":
+                            "provider_unavailable",
                     }
                 )
 
@@ -230,16 +417,21 @@ class RouterEngine:
                 candidate.model,
             ):
 
-                record = self.health_store.get(
-                    candidate.provider,
-                    candidate.model,
+                record = (
+                    self.health_store.get(
+                        candidate.provider,
+                        candidate.model,
+                    )
                 )
 
                 rejected.append(
                     {
-                        "candidate": candidate.identifier,
-                        "reason": "health_unavailable",
-                        "state": record.state.value,
+                        "candidate":
+                            candidate.identifier,
+                        "reason":
+                            "health_unavailable",
+                        "state":
+                            record.state.value,
                         "cooldown_remaining":
                             record.cooldown_remaining,
                     }
@@ -247,9 +439,14 @@ class RouterEngine:
 
                 continue
 
-            available.append(candidate)
+            available.append(
+                candidate
+            )
 
-        return available, rejected
+        return (
+            available,
+            rejected,
+        )
 
     # ========================================================
     # QUOTA FILTER
@@ -257,26 +454,41 @@ class RouterEngine:
 
     def filter_quota(
         self,
-        candidates: Iterable[ModelCandidate],
-    ) -> tuple[list[ModelCandidate], list[dict[str, Any]]]:
+        candidates: Iterable[
+            ModelCandidate
+        ],
+    ) -> tuple[
+        list[ModelCandidate],
+        list[dict[str, Any]],
+    ]:
 
-        available = []
-        rejected = []
+        available: list[
+            ModelCandidate
+        ] = []
+
+        rejected: list[
+            dict[str, Any]
+        ] = []
 
         for candidate in candidates:
 
-            status = self.quota_store.check(
-                candidate.provider,
-                candidate.model,
+            status = (
+                self.quota_store.check(
+                    candidate.provider,
+                    candidate.model,
+                )
             )
 
             if not status.allowed:
 
                 rejected.append(
                     {
-                        "candidate": candidate.identifier,
-                        "reason": "quota_unavailable",
-                        "quota_reason": status.reason,
+                        "candidate":
+                            candidate.identifier,
+                        "reason":
+                            "quota_unavailable",
+                        "quota_reason":
+                            status.reason,
                         "remaining_requests":
                             status.remaining_requests,
                         "remaining_tokens":
@@ -286,9 +498,91 @@ class RouterEngine:
 
                 continue
 
-            available.append(candidate)
+            available.append(
+                candidate
+            )
 
-        return available, rejected
+        return (
+            available,
+            rejected,
+        )
+
+    # ========================================================
+    # REQUEST SIZE FILTER
+    # ========================================================
+
+    @staticmethod
+    def filter_request_size(
+        candidates: Iterable[
+            ModelCandidate
+        ],
+        request_tokens: int,
+    ) -> tuple[
+        list[ModelCandidate],
+        list[dict[str, Any]],
+    ]:
+        """
+        Reject candidates whose configured request-token limit is
+        smaller than the estimated request size.
+
+        A candidate with no configured limit remains eligible.
+
+        This is a hard preflight filter and runs before ranking.
+        """
+
+        compatible: list[
+            ModelCandidate
+        ] = []
+
+        rejected: list[
+            dict[str, Any]
+        ] = []
+
+        for candidate in candidates:
+
+            limit = (
+                candidate.max_request_tokens
+            )
+
+            if limit is None:
+
+                compatible.append(
+                    candidate
+                )
+
+                continue
+
+            if request_tokens > limit:
+
+                rejected.append(
+                    {
+                        "candidate":
+                            candidate.identifier,
+
+                        "reason":
+                            "request_too_large",
+
+                        "estimated_request_tokens":
+                            request_tokens,
+
+                        "max_request_tokens":
+                            limit,
+
+                        "excess_tokens":
+                            request_tokens - limit,
+                    }
+                )
+
+                continue
+
+            compatible.append(
+                candidate
+            )
+
+        return (
+            compatible,
+            rejected,
+        )
 
     # ========================================================
     # CAPABILITY FILTER
@@ -296,16 +590,28 @@ class RouterEngine:
 
     @staticmethod
     def filter_capabilities(
-        candidates: Iterable[ModelCandidate],
-        required_capabilities: Iterable[str],
-    ) -> tuple[list[ModelCandidate], list[dict[str, Any]]]:
+        candidates: Iterable[
+            ModelCandidate
+        ],
+        required_capabilities: Iterable[
+            str
+        ],
+    ) -> tuple[
+        list[ModelCandidate],
+        list[dict[str, Any]],
+    ]:
 
         required = set(
             required_capabilities
         )
 
-        compatible = []
-        rejected = []
+        compatible: list[
+            ModelCandidate
+        ] = []
+
+        rejected: list[
+            dict[str, Any]
+        ] = []
 
         for candidate in candidates:
 
@@ -313,7 +619,10 @@ class RouterEngine:
                 candidate.capabilities
             )
 
-            missing = required - capabilities
+            missing = (
+                required
+                - capabilities
+            )
 
             if missing:
 
@@ -330,9 +639,14 @@ class RouterEngine:
 
                 continue
 
-            compatible.append(candidate)
+            compatible.append(
+                candidate
+            )
 
-        return compatible, rejected
+        return (
+            compatible,
+            rejected,
+        )
 
     # ========================================================
     # ROUTE
@@ -343,8 +657,10 @@ class RouterEngine:
         request: RoutingRequest,
     ) -> RoutingDecision:
 
-        candidates = self.discover_candidates(
-            request
+        candidates = (
+            self.discover_candidates(
+                request
+            )
         )
 
         candidates_considered = len(
@@ -381,12 +697,29 @@ class RouterEngine:
         )
 
         # ----------------------------------------------------
+        # REQUEST SIZE
+        # ----------------------------------------------------
+
+        request_tokens = (
+            estimate_request_tokens(
+                request
+            )
+        )
+
+        size_compatible, size_rejected = (
+            self.filter_request_size(
+                quota_available,
+                request_tokens,
+            )
+        )
+
+        # ----------------------------------------------------
         # CAPABILITIES
         # ----------------------------------------------------
 
         compatible, capability_rejected = (
             self.filter_capabilities(
-                quota_available,
+                size_compatible,
                 request.required_capabilities,
             )
         )
@@ -397,18 +730,13 @@ class RouterEngine:
 
         ranked = rank_candidates(
             compatible,
-
             required_capabilities=(
                 request.required_capabilities
             ),
-
             metrics_store=self.metrics_store,
-
             quota_store=self.quota_store,
-
             policy=self.policy,
         )
-
 
         selected = (
             ranked[0]
@@ -418,16 +746,26 @@ class RouterEngine:
 
         return RoutingDecision(
             selected=selected,
-            candidates_considered=candidates_considered,
-            candidates_available=len(available),
-            candidates_compatible=len(compatible),
+            candidates_considered=(
+                candidates_considered
+            ),
+            candidates_available=len(
+                available
+            ),
+            candidates_compatible=len(
+                compatible
+            ),
             rejected=tuple(
                 health_rejected
                 + quota_rejected
+                + size_rejected
                 + capability_rejected
             ),
-            ranked=tuple(ranked),
+            ranked=tuple(
+                ranked
+            ),
         )
+
 
 # ============================================================
 # CONVENIENCE FUNCTION
@@ -439,7 +777,9 @@ def route_request(
     ] = None,
     provider: Optional[str] = None,
     model: Optional[str] = None,
-    metadata: Optional[dict[str, Any]] = None,
+    metadata: Optional[
+        dict[str, Any]
+    ] = None,
 ) -> RoutingDecision:
     """
     Backwards-compatible convenience wrapper.
@@ -451,7 +791,8 @@ def route_request(
 
     request = RoutingRequest(
         required_capabilities=frozenset(
-            required_capabilities or []
+            required_capabilities
+            or []
         ),
         provider=provider,
         model=model,

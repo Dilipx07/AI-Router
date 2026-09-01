@@ -1,8 +1,17 @@
 """
-Model intelligence layer for AI Router v1.
+AI Router v1
+Model intelligence layer.
 
 This module converts provider configuration into normalized
-model candidates that can later be scored and routed.
+model candidates that can later be filtered, scored, and routed.
+
+The model candidate metadata may optionally contain runtime/request
+constraints such as:
+
+    max_request_tokens
+
+These constraints are used by the routing engine to avoid sending
+requests that a provider/model cannot accept.
 """
 
 from __future__ import annotations
@@ -27,6 +36,12 @@ class ModelCandidate:
     Normalized model candidate used by the routing engine.
 
     A candidate represents one concrete provider + model pair.
+
+    Metadata may contain optional model constraints, for example:
+
+        {
+            "max_request_tokens": 8000,
+        }
     """
 
     provider: str
@@ -48,14 +63,53 @@ class ModelCandidate:
     @property
     def identifier(self) -> str:
         """Unique human-readable candidate identifier."""
-        return f"{self.provider}/{self.model}"
+
+        return (
+            f"{self.provider}/{self.model}"
+        )
 
     def supports(
         self,
         capability: str,
     ) -> bool:
         """Return whether this model supports a capability."""
-        return capability in self.capabilities
+
+        return (
+            capability
+            in self.capabilities
+        )
+
+    @property
+    def max_request_tokens(
+        self,
+    ) -> Optional[int]:
+        """
+        Return the configured maximum request-token constraint.
+
+        This is intentionally optional. Models without a known
+        provider request limit return None and are not rejected
+        by request-size filtering.
+        """
+
+        value = self.metadata.get(
+            "max_request_tokens"
+        )
+
+        if value is None:
+            return None
+
+        try:
+            value = int(value)
+        except (
+            TypeError,
+            ValueError,
+        ):
+            return None
+
+        if value <= 0:
+            return None
+
+        return value
 
 
 # ============================================================
@@ -77,12 +131,19 @@ class ModelRegistry:
     ) -> None:
 
         if providers is None:
-            providers = PROVIDER_REGISTRY.values()
+            providers = (
+                PROVIDER_REGISTRY.values()
+            )
 
-        self._candidates: list[ModelCandidate] = []
+        self._candidates: list[
+            ModelCandidate
+        ] = []
 
         for provider in providers:
-            self._register_provider(provider)
+
+            self._register_provider(
+                provider
+            )
 
     # --------------------------------------------------------
     # REGISTRATION
@@ -110,7 +171,9 @@ class ModelRegistry:
                 },
             )
 
-            self._candidates.append(candidate)
+            self._candidates.append(
+                candidate
+            )
 
     # --------------------------------------------------------
     # ALL MODELS
@@ -128,13 +191,16 @@ class ModelRegistry:
         candidates = self._candidates
 
         if enabled_only:
+
             candidates = [
                 candidate
                 for candidate in candidates
                 if candidate.enabled
             ]
 
-        return list(candidates)
+        return list(
+            candidates
+        )
 
     # --------------------------------------------------------
     # PROVIDER FILTER
@@ -177,7 +243,9 @@ class ModelRegistry:
             for candidate in self.all(
                 enabled_only=enabled_only
             )
-            if candidate.supports(capability)
+            if candidate.supports(
+                capability
+            )
         ]
 
     # --------------------------------------------------------
@@ -217,7 +285,11 @@ class ModelRegistry:
         Matching is case-insensitive.
         """
 
-        query = query.strip().lower()
+        query = (
+            query
+            .strip()
+            .lower()
+        )
 
         if not query:
             return []
@@ -226,9 +298,12 @@ class ModelRegistry:
             candidate
             for candidate in self.all()
             if (
-                query in candidate.provider.lower()
-                or query in candidate.model.lower()
-                or query in candidate.identifier.lower()
+                query
+                in candidate.provider.lower()
+                or query
+                in candidate.model.lower()
+                or query
+                in candidate.identifier.lower()
             )
         ]
 
@@ -236,21 +311,29 @@ class ModelRegistry:
     # PROVIDER LIST
     # --------------------------------------------------------
 
-    def providers(self) -> list[str]:
+    def providers(
+        self,
+    ) -> list[str]:
         """
-        Return unique provider names represented in the registry.
+        Return unique provider names represented
+        in the registry.
         """
 
-        result = []
-        seen = set()
+        result: list[str] = []
+        seen: set[str] = set()
 
         for candidate in self._candidates:
 
             if candidate.provider in seen:
                 continue
 
-            seen.add(candidate.provider)
-            result.append(candidate.provider)
+            seen.add(
+                candidate.provider
+            )
+
+            result.append(
+                candidate.provider
+            )
 
         return result
 
@@ -263,7 +346,9 @@ class ModelRegistry:
         *,
         enabled_only: bool = True,
     ) -> int:
-        """Return the number of registered candidates."""
+        """
+        Return the number of registered candidates.
+        """
 
         return len(
             self.all(

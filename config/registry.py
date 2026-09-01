@@ -11,16 +11,39 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from typing import Optional
+from pathlib import Path
+from typing import Any, Optional
+
+from dotenv import load_dotenv
+
+
+# ============================================================
+# ENVIRONMENT LOADING
+# ============================================================
+
+PROJECT_ROOT = (
+    Path(__file__).resolve().parent.parent
+)
+
+load_dotenv(
+    PROJECT_ROOT / ".env"
+)
 
 
 # ============================================================
 # ENVIRONMENT
 # ============================================================
 
-def env(name: str, default: str = "") -> str:
+def env(
+    name: str,
+    default: str = "",
+) -> str:
     """Read an environment variable and strip whitespace."""
-    return os.getenv(name, default).strip()
+
+    return os.getenv(
+        name,
+        default,
+    ).strip()
 
 
 # ============================================================
@@ -45,7 +68,7 @@ class ModelConfig:
 
     max_tokens: Optional[int] = None
 
-    metadata: dict = field(
+    metadata: dict[str, Any] = field(
         default_factory=dict
     )
 
@@ -76,7 +99,7 @@ class ProviderConfig:
         default_factory=list
     )
 
-    metadata: dict = field(
+    metadata: dict[str, Any] = field(
         default_factory=dict
     )
 
@@ -90,7 +113,8 @@ class ProviderConfig:
         if not self.enabled:
             return False
 
-        # Ollama is local and does not require an API key.
+        # Ollama is local/cloud-client based and does not
+        # require an API key in this router configuration.
         if self.name == "ollama":
             return True
 
@@ -100,9 +124,13 @@ class ProviderConfig:
                 and self.account_id
             )
 
-        return bool(self.api_key)
+        return bool(
+            self.api_key
+        )
 
-    def get_models(self) -> list[ModelConfig]:
+    def get_models(
+        self,
+    ) -> list[ModelConfig]:
         """Return enabled models ordered by priority."""
 
         return sorted(
@@ -123,9 +151,22 @@ def model(
     name: str,
     priority: int,
     *capabilities: str,
+    metadata: Optional[
+        dict[str, Any]
+    ] = None,
 ) -> ModelConfig:
     """
     Convenience constructor for model definitions.
+
+    Optional metadata can hold normalized routing constraints,
+    for example:
+
+        metadata={
+            "max_request_tokens": 8000,
+        }
+
+    The metadata is carried into ModelCandidate by
+    router.models.ModelRegistry.
     """
 
     return ModelConfig(
@@ -134,6 +175,11 @@ def model(
         capabilities=frozenset(
             capabilities
         ),
+        metadata=(
+            metadata
+            if metadata is not None
+            else {}
+        ),
     )
 
 
@@ -141,7 +187,10 @@ def model(
 # PROVIDER REGISTRY
 # ============================================================
 
-PROVIDER_REGISTRY: dict[str, ProviderConfig] = {
+PROVIDER_REGISTRY: dict[
+    str,
+    ProviderConfig,
+] = {
 
     # ========================================================
     # GOOGLE
@@ -150,7 +199,9 @@ PROVIDER_REGISTRY: dict[str, ProviderConfig] = {
     "google": ProviderConfig(
         name="google",
 
-        api_key=env("GOOGLE_API_KEY"),
+        api_key=env(
+            "GOOGLE_API_KEY"
+        ),
 
         base_url=(
             "https://generativelanguage.googleapis.com/"
@@ -204,7 +255,9 @@ PROVIDER_REGISTRY: dict[str, ProviderConfig] = {
     "groq": ProviderConfig(
         name="groq",
 
-        api_key=env("GROQ_API_KEY"),
+        api_key=env(
+            "GROQ_API_KEY"
+        ),
 
         base_url=(
             "https://api.groq.com/openai/v1"
@@ -216,18 +269,27 @@ PROVIDER_REGISTRY: dict[str, ProviderConfig] = {
                 10,
                 "chat",
                 "tools",
+                metadata={
+                    "max_request_tokens": 8000,
+                },
             ),
             model(
                 "openai/gpt-oss-20b",
                 20,
                 "chat",
                 "tools",
+                metadata={
+                    "max_request_tokens": 8000,
+                },
             ),
             model(
                 "qwen/qwen3.6-27b",
                 30,
                 "chat",
                 "tools",
+                metadata={
+                    "max_request_tokens": 8000,
+                },
             ),
         ],
     ),
@@ -239,7 +301,9 @@ PROVIDER_REGISTRY: dict[str, ProviderConfig] = {
     "openrouter": ProviderConfig(
         name="openrouter",
 
-        api_key=env("OPENROUTER_API_KEY"),
+        api_key=env(
+            "OPENROUTER_API_KEY"
+        ),
 
         base_url=(
             "https://openrouter.ai/api/v1"
@@ -280,7 +344,9 @@ PROVIDER_REGISTRY: dict[str, ProviderConfig] = {
     "cloudflare": ProviderConfig(
         name="cloudflare",
 
-        api_key=env("CLOUDFLARE_API_KEY"),
+        api_key=env(
+            "CLOUDFLARE_API_KEY"
+        ),
 
         account_id=env(
             "CLOUDFLARE_ACCOUNT_ID"
@@ -358,11 +424,13 @@ PROVIDER_REGISTRY: dict[str, ProviderConfig] = {
                 "chat",
                 "tools",
             ),
+
+            # This model was verified to reject tools and
+            # tool_choice, so it is explicitly chat-only.
             model(
                 "@cf/meta/llama-3.1-8b-instruct-fp8",
                 120,
                 "chat",
-                "tools",
             ),
         ],
     ),
@@ -374,7 +442,9 @@ PROVIDER_REGISTRY: dict[str, ProviderConfig] = {
     "huggingface": ProviderConfig(
         name="huggingface",
 
-        api_key=env("HF_API_KEY"),
+        api_key=env(
+            "HF_API_KEY"
+        ),
 
         base_url=(
             "https://router.huggingface.co/v1"
@@ -500,7 +570,10 @@ PROVIDER_REGISTRY: dict[str, ProviderConfig] = {
 # PROVIDER ORDER
 # ============================================================
 
-PROVIDER_ORDER: tuple[str, ...] = (
+PROVIDER_ORDER: tuple[
+    str,
+    ...
+] = (
     "google",
     "groq",
     "openrouter",
@@ -524,22 +597,33 @@ def get_provider(
     )
 
 
-def get_enabled_providers() -> list[ProviderConfig]:
-    """Return enabled providers in routing order."""
+def get_enabled_providers() -> list[
+    ProviderConfig
+]:
+    """Return providers that are enabled."""
 
-    result = []
+    result: list[
+        ProviderConfig
+    ] = []
 
     for name in PROVIDER_ORDER:
 
-        provider = PROVIDER_REGISTRY.get(name)
+        provider = PROVIDER_REGISTRY.get(
+            name
+        )
 
         if provider and provider.enabled:
-            result.append(provider)
+
+            result.append(
+                provider
+            )
 
     return result
 
 
-def get_configured_providers() -> list[ProviderConfig]:
+def get_configured_providers() -> list[
+    ProviderConfig
+]:
     """Return providers that currently have credentials."""
 
     return [
