@@ -239,12 +239,12 @@ PROVIDER_REGISTRY: dict[
                 "chat",
                 "tools",
             ),
-            model(
-                "gemini-2.5-flash-lite",
-                60,
-                "chat",
-                "tools",
-            ),
+            # model(
+            #     "gemini-2.5-flash-lite",
+            #     60,
+            #     "chat",
+            #     "tools",
+            # ),
         ],
     ),
 
@@ -395,13 +395,13 @@ PROVIDER_REGISTRY: dict[
                 "tools",
                 "reasoning",
             ),
-            model(
-                "@cf/openai/gpt-oss-120b",
-                60,
-                "chat",
-                "tools",
-                "reasoning",
-            ),
+            # model(
+            #     "@cf/openai/gpt-oss-120b",
+            #     60,
+            #     "chat",
+            #     "tools",
+            #     "reasoning",
+            # ),
             model(
                 "@cf/openai/gpt-oss-20b",
                 70,
@@ -414,13 +414,13 @@ PROVIDER_REGISTRY: dict[
                 80,
                 "chat",
             ),
-            model(
-                "@cf/qwen/qwen3-30b-a3b-fp8",
-                90,
-                "chat",
-                "tools",
-                "reasoning",
-            ),
+            # model(
+            #     "@cf/qwen/qwen3-30b-a3b-fp8",
+            #     90,
+            #     "chat",
+            #     "tools",
+            #     "reasoning",
+            # ),
             model(
                 "@cf/zai-org/glm-4.7-flash",
                 100,
@@ -565,12 +565,12 @@ PROVIDER_REGISTRY: dict[
                 "chat",
                 "tools",
             ),
-            model(
-                "gemma4:31b-cloud",
-                70,
-                "chat",
-                "tools",
-            ),
+            # model(
+            #     "gemma4:31b-cloud",
+            #     70,
+            #     "chat",
+            #     "tools",
+            # ),
         ],
     ),
 }
